@@ -1,6 +1,6 @@
 <?php
 session_start();
-require_once 'config/database.php';
+require_once __DIR__ . '/app/config/bootstrap.php';
 
 function existeTablaReset(mysqli $conn, string $tabla): bool
 {
