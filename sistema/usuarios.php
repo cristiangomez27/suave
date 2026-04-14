@@ -117,6 +117,12 @@ function passwordFuerteUsuarios(string $password): bool {
     return true;
 }
 
+function responderJsonUsuarios(array $data): void {
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode($data, JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 /*
 |--------------------------------------------------------------------------
 | CREAR TABLAS SI NO EXISTEN
@@ -211,10 +217,13 @@ $esAdmin = ($rolActual === 'admin');
 |--------------------------------------------------------------------------
 */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accion']) && $_POST['accion'] === 'registrar_usuario') {
+    $esAjax = strtolower($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'xmlhttprequest';
     if ($permitir_registro != 1) {
+        if ($esAjax) responderJsonUsuarios(['ok' => false, 'mensaje' => '❌ El registro está desactivado.']);
         $mensaje = "❌ El registro está desactivado.";
         $tipo_mensaje = 'error';
     } elseif ($solo_admin_registra == 1 && !$esAdmin) {
+        if ($esAjax) responderJsonUsuarios(['ok' => false, 'mensaje' => '❌ Solo el administrador puede registrar usuarios.']);
         $mensaje = "❌ Solo el administrador puede registrar usuarios.";
         $tipo_mensaje = 'error';
     } else {
@@ -297,9 +306,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accion']) && $_POST['
                     $stmtInsert->bind_param("ssssss", $nombre, $usuario, $correo, $passwordHash, $rol, $estado);
 
                     if ($stmtInsert->execute()) {
+                        if (function_exists('websocket_notify')) {
+                            websocket_notify('usuarios_actualizados', 'usuarios', 'Usuario registrado', [
+                                'accion' => 'registrar',
+                                'usuario' => $usuario
+                            ]);
+                        }
+                        if ($esAjax) responderJsonUsuarios(['ok' => true, 'mensaje' => '✅ Usuario registrado correctamente.']);
                         $mensaje = "✅ Usuario registrado correctamente.";
                         $tipo_mensaje = 'ok';
                     } else {
+                        if ($esAjax) responderJsonUsuarios(['ok' => false, 'mensaje' => '❌ Error al registrar usuario: ' . $stmtInsert->error]);
                         $mensaje = "❌ Error al registrar usuario: " . $stmtInsert->error;
                         $tipo_mensaje = 'error';
                     }
@@ -383,6 +400,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accion']) && $_POST['
                     $tipo_mensaje = 'error';
                 } else {
                     if ($stmtUpdate->execute()) {
+                        if (function_exists('websocket_notify')) {
+                            websocket_notify('usuarios_actualizados', 'usuarios', 'Usuario actualizado', [
+                                'accion' => 'actualizar',
+                                'usuario_id' => $usuario_id
+                            ]);
+                        }
                         $mensaje = "✅ Usuario actualizado correctamente.";
                         $tipo_mensaje = 'ok';
                     } else {
@@ -425,6 +448,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accion']) && $_POST['
             } else {
                 if (enviarUsuarioAPapelera($conn, 'usuarios', $usuario_id, $usuarioEliminar, $usuario_sesion)) {
                     if ($conn->query("DELETE FROM usuarios WHERE id = $usuario_id")) {
+                        if (function_exists('websocket_notify')) {
+                            websocket_notify('usuarios_actualizados', 'usuarios', 'Usuario eliminado', [
+                                'accion' => 'eliminar',
+                                'usuario_id' => $usuario_id
+                            ]);
+                        }
                         $mensaje = "🗑️ Usuario enviado a papelera.";
                         $tipo_mensaje = 'ok';
                     } else {
@@ -504,10 +533,10 @@ if ($esAdmin && isset($_GET['editar'])) {
         body{
             background:
                 <?php if (!empty($fondoContenido)): ?>
-                linear-gradient(rgba(0,0,0,0.46), rgba(0,0,0,0.62)),
-                url('<?php echo htmlspecialchars($fondoContenido, ENT_QUOTES, 'UTF-8'); ?>') center/cover no-repeat fixed;
+                linear-gradient(rgba(8,8,12,0.35), rgba(8,8,12,0.55)),
+                url('<?php echo htmlspecialchars($fondoContenido, ENT_QUOTES, 'UTF-8'); ?>') center/cover fixed no-repeat;
                 <?php else: ?>
-                var(--bg);
+                linear-gradient(135deg, #0b0b0f, #14151a);
                 <?php endif; ?>;
             color:white;
             font-family:'Segoe UI',sans-serif;
@@ -521,7 +550,9 @@ if ($esAdmin && isset($_GET['editar'])) {
             content:"";
             position:fixed;
             inset:0;
-            background:radial-gradient(circle at top right, rgba(200,155,60,0.08), transparent 28%);
+            background:
+                radial-gradient(circle at 20% 30%,rgba(200,155,60,.08) 0%,transparent 40%),
+                radial-gradient(circle at 80% 70%,rgba(200,155,60,.06) 0%,transparent 40%);
             z-index:-1;
             pointer-events:none;
         }
@@ -626,6 +657,39 @@ if ($esAdmin && isset($_GET['editar'])) {
         .titulo span{
             color:var(--gold);
             font-weight:800;
+        }
+
+        .head-row{
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            gap:14px;
+            flex-wrap:wrap;
+        }
+
+        .socket-indicator{
+            display:inline-flex;
+            align-items:center;
+            gap:8px;
+            border-radius:999px;
+            padding:8px 12px;
+            font-size:12px;
+            letter-spacing:0.5px;
+            border:1px solid rgba(255,255,255,0.14);
+            background:rgba(255,255,255,0.04);
+        }
+
+        .socket-indicator .dot-status{
+            width:9px;
+            height:9px;
+            border-radius:50%;
+            background:#ef4444;
+            box-shadow:0 0 0 0 rgba(239,68,68,.4);
+        }
+
+        .socket-indicator.online .dot-status{
+            background:#22c55e;
+            box-shadow:0 0 8px rgba(34,197,94,.6);
         }
 
         .subtitulo{
@@ -984,7 +1048,13 @@ if ($esAdmin && isset($_GET['editar'])) {
     </div>
 
     <div class="main">
-        <h1 class="titulo">Gestión de <span>USUARIOS</span></h1>
+        <div class="head-row">
+            <h1 class="titulo">Gestión de <span>USUARIOS</span></h1>
+            <div id="socketIndicator" class="socket-indicator">
+                <span class="dot-status"></span>
+                <span id="socketText">WS desconectado</span>
+            </div>
+        </div>
 
         <?php if ($mensaje): ?>
             <div id="mensajeFlash" class="mensaje <?php echo $tipo_mensaje === 'error' ? 'error' : 'ok'; ?>">
@@ -1202,6 +1272,61 @@ if ($esAdmin && isset($_GET['editar'])) {
 
         const passwordInput = document.getElementById("password");
         const formUsuario = document.getElementById("formUsuario");
+        const socketIndicator = document.getElementById('socketIndicator');
+        const socketText = document.getElementById('socketText');
+        let socket = null;
+        let reconnectTimer = null;
+
+        function setSocketStatus(conectado) {
+            if (!socketIndicator || !socketText) return;
+            socketIndicator.classList.toggle('online', !!conectado);
+            socketText.textContent = conectado ? 'WS conectado' : 'WS desconectado';
+        }
+
+        function iniciarWebSocket() {
+            try {
+                const protocolo = window.location.protocol === 'https:' ? 'wss' : 'ws';
+                const host = window.location.hostname || '127.0.0.1';
+                socket = new WebSocket(`${protocolo}://${host}:8080`);
+
+                socket.onopen = function() {
+                    setSocketStatus(true);
+                    console.log('WebSocket usuarios conectado');
+                };
+
+                socket.onmessage = function(event) {
+                    try {
+                        const data = JSON.parse(event.data);
+                        if (!data || data.modulo !== 'usuarios') return;
+
+                        const tipo = data.tipo || '';
+                        if (tipo === 'usuarios_actualizados' || tipo === 'refresh') {
+                            window.location.reload();
+                        }
+                    } catch (e) {
+                        console.log('Mensaje WS no válido', e);
+                    }
+                };
+
+                socket.onerror = function(err) {
+                    setSocketStatus(false);
+                    console.log('Error WebSocket usuarios', err);
+                };
+
+                socket.onclose = function() {
+                    setSocketStatus(false);
+                    if (!reconnectTimer) {
+                        reconnectTimer = setTimeout(function() {
+                            reconnectTimer = null;
+                            iniciarWebSocket();
+                        }, 3500);
+                    }
+                };
+            } catch (e) {
+                setSocketStatus(false);
+                console.log('No se pudo iniciar WebSocket de usuarios', e);
+            }
+        }
 
         function setCheck(id, ok, text) {
             const el = document.getElementById(id);
@@ -1246,6 +1371,8 @@ if ($esAdmin && isset($_GET['editar'])) {
                 }
             });
         }
+
+        iniciarWebSocket();
     });
     </script>
 </body>
