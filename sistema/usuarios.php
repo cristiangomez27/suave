@@ -577,14 +577,14 @@ if ($esAdmin && isset($_GET['editar'])) {
             50%{transform:scale(1.05);}
         }
 
-        @keyframes glow{
-            from{filter:drop-shadow(0 0 5px rgba(200,155,60,0.4));}
-            to{filter:drop-shadow(0 0 15px rgba(200,155,60,0.7));}
+        @keyframes glow {
+            from { filter: drop-shadow(0 0 5px rgba(200,155,60,0.4)); }
+            to { filter: drop-shadow(0 0 15px rgba(200,155,60,0.7)); }
         }
 
-        @keyframes particlesMove{
-            0%{transform:translateY(0);}
-            100%{transform:translateY(-40px);}
+        @keyframes particlesMove {
+            0% { transform: translateY(0); }
+            100% { transform: translateY(-40px); }
         }
 
         body{
