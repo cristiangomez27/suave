@@ -9,7 +9,59 @@ if (!isset($_SESSION['usuario_id'])) {
     exit;
 }
 
-require_once __DIR__ . '/app/config/bootstrap.php';
+/*
+|--------------------------------------------------------------------------
+| BOOTSTRAP / COMPATIBILIDAD DE RUTAS
+|--------------------------------------------------------------------------
+| En algunos despliegues (hosting compartido) no existe /app/config/bootstrap.php
+| en la misma estructura del repositorio. Se intenta cargar bootstrap y, si no
+| existe, se hace fallback a database + websocket helper.
+*/
+$bootstrapCargado = false;
+$rutasBootstrap = [
+    __DIR__ . '/app/config/bootstrap.php',
+    __DIR__ . '/config/bootstrap.php',
+];
+
+foreach ($rutasBootstrap as $rutaBootstrap) {
+    if (is_file($rutaBootstrap)) {
+        require_once $rutaBootstrap;
+        $bootstrapCargado = true;
+        break;
+    }
+}
+
+if (!$bootstrapCargado) {
+    $rutasDb = [
+        __DIR__ . '/app/config/database.php',
+        __DIR__ . '/config/database.php',
+    ];
+
+    foreach ($rutasDb as $rutaDb) {
+        if (is_file($rutaDb)) {
+            require_once $rutaDb;
+            break;
+        }
+    }
+
+    $rutasWebsocket = [
+        __DIR__ . '/app/helpers/websocket_notify.php',
+        __DIR__ . '/helpers/websocket_notify.php',
+        __DIR__ . '/websocket_notify.php',
+    ];
+
+    foreach ($rutasWebsocket as $rutaWs) {
+        if (is_file($rutaWs)) {
+            require_once $rutaWs;
+            break;
+        }
+    }
+}
+
+if (!isset($conn) || !($conn instanceof mysqli)) {
+    http_response_code(500);
+    exit('No se pudo inicializar la conexión a la base de datos.');
+}
 
 $mensaje = '';
 $tipo_mensaje = 'ok';
